@@ -19,6 +19,6 @@
     <key>LSUIElement</key>
     <true/>
     <key>NSCalendarsFullAccessUsageDescription</key>
-    <string>RemindMeet lit ton agenda pour afficher un rappel plein écran une minute avant chaque réunion.</string>
+    <string>RemindMeet reads your calendar to show a full-screen reminder one minute before each meeting.</string>
 </dict>
 </plist>

@@ -43,7 +43,7 @@ func fetchMeetings(store: EKEventStore, around now: Date) -> [Meeting] {
         guard url != nil || event.hasAttendees else { return nil }
         return Meeting(
             id: "\(event.eventIdentifier ?? event.calendarItemIdentifier)@\(event.startDate.timeIntervalSince1970)",
-            title: event.title ?? "Réunion",
+            title: event.title ?? "Meeting",
             start: event.startDate,
             end: event.endDate,
             url: url,

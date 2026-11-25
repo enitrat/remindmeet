@@ -175,7 +175,7 @@ private struct PanelView: View {
             }
             .padding(.top, 52)
 
-            Button("Je saute cette réunion", action: onSkip)
+            Button("Skip this meeting", action: onSkip)
                 .buttonStyle(PillButtonStyle(kind: .quiet))
                 .padding(.top, 12)
 
@@ -188,21 +188,21 @@ private struct PanelView: View {
     }
 
     private func joinLabel(_ meeting: Meeting) -> String {
-        if meeting.url == nil { return "J'y vais" }
-        return model.meetOpened ? "J'y suis" : "Rejoindre"
+        if meeting.url == nil { return "On my way" }
+        return model.meetOpened ? "I'm in" : "Join"
     }
 
     private func linkLabel(_ meeting: Meeting) -> String {
         let time = "\(meeting.start.formatted(date: .omitted, time: .shortened)) – \(meeting.end.formatted(date: .omitted, time: .shortened))"
-        guard let url = meeting.url else { return "\(time)  ·  Pas de lien visio" }
+        guard let url = meeting.url else { return "\(time)  ·  No video link" }
         let code = url.lastPathComponent
         return code.count > 1 ? "\(time)  ·  meet.google.com/\(code)" : "\(time)  ·  Google Meet"
     }
 
     private func footnote(_ meeting: Meeting, late: Bool) -> String {
         guard meeting.url != nil else { return " " }
-        if model.meetOpened { return "Le Meet est ouvert dans ton navigateur." }
-        return late ? " " : "Le Meet s'ouvrira tout seul à l'heure."
+        if model.meetOpened { return "Meet is open in your browser." }
+        return late ? " " : "Meet opens on its own at start time."
     }
 }
 
@@ -214,7 +214,7 @@ private struct CalendarLabel: View {
             Circle()
                 .fill(meeting.calendarColor.map { Color(cgColor: $0) } ?? .white.opacity(0.6))
                 .frame(width: 8, height: 8)
-            Text(meeting.calendarName.isEmpty ? "Réunion" : meeting.calendarName)
+            Text(meeting.calendarName.isEmpty ? "Meeting" : meeting.calendarName)
                 .font(.system(size: 13, weight: .medium))
                 .foregroundStyle(.white.opacity(0.6))
         }
@@ -253,7 +253,7 @@ private struct Countdown: View {
                     .foregroundStyle(tint)
                     .contentTransition(.numericText(countsDown: !late))
                     .animation(.easeOut(duration: 0.2), value: Int(delta))
-                Text(late ? "depuis le début" : "avant le début")
+                Text(late ? "since start" : "until start")
                     .font(.system(size: 13, weight: .medium))
                     .foregroundStyle(.white.opacity(0.45))
             }
@@ -279,7 +279,7 @@ private struct SnoozeDots: View {
                     .frame(width: 5, height: 5)
             }
         }
-        .accessibilityLabel("\(left) restant")
+        .accessibilityLabel("\(left) left")
     }
 }
 

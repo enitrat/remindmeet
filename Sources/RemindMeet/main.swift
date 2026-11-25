@@ -114,19 +114,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
         let header: String
         if !hasAccess {
-            header = "Pas d'accès au calendrier"
+            header = "No calendar access"
         } else if let next = nextMeeting {
-            header = "Prochaine : \(next.title) à \(next.start.formatted(date: .omitted, time: .shortened))"
+            header = "Next: \(next.title) at \(next.start.formatted(date: .omitted, time: .shortened))"
         } else {
-            header = "Aucune réunion dans l'heure"
+            header = "No meetings in the next hour"
         }
         menu.addItem(withTitle: header, action: nil, keyEquivalent: "")
         menu.addItem(.separator())
 
-        menu.addItem(withTitle: "Tester le panneau", action: #selector(startTest), keyEquivalent: "").target = self
+        menu.addItem(withTitle: "Test the panel", action: #selector(startTest), keyEquivalent: "").target = self
 
         menu.addItem(.separator())
-        menu.addItem(withTitle: "Quitter", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+        menu.addItem(withTitle: "Quit", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
     }
 
     /// A fake meeting starting in 20 s: exercises T-1, snooze and the T0 auto-open on a real Meet URL.
@@ -134,7 +134,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let start = Date().addingTimeInterval(20)
         testMeeting = Meeting(
             id: "test@\(start.timeIntervalSince1970)",
-            title: "Réunion de test",
+            title: "Test meeting",
             start: start,
             end: start.addingTimeInterval(5 * 60),
             url: URL(string: "https://meet.google.com/"),
