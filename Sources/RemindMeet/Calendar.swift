@@ -8,6 +8,8 @@ struct Meeting: Equatable {
     let start: Date
     let end: Date
     let url: URL?
+    let calendarName: String
+    let calendarColor: CGColor?
 }
 
 private let meetRegex = try! NSRegularExpression(
@@ -44,7 +46,9 @@ func fetchMeetings(store: EKEventStore, around now: Date) -> [Meeting] {
             title: event.title ?? "Réunion",
             start: event.startDate,
             end: event.endDate,
-            url: url
+            url: url,
+            calendarName: event.calendar?.title ?? "",
+            calendarColor: event.calendar?.cgColor
         )
     }
 }

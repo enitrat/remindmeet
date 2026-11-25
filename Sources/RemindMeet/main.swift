@@ -30,7 +30,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         )
 
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
-        statusItem.button?.image = NSImage(systemSymbolName: "bell", accessibilityDescription: "RemindMeet")
+        statusItem.button?.image = NSImage(systemSymbolName: "calendar.badge.clock", accessibilityDescription: "RemindMeet")
         let menu = NSMenu()
         menu.delegate = self
         statusItem.menu = menu
@@ -137,7 +137,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             title: "Réunion de test",
             start: start,
             end: start.addingTimeInterval(5 * 60),
-            url: URL(string: "https://meet.google.com/")
+            url: URL(string: "https://meet.google.com/"),
+            calendarName: "Test",
+            calendarColor: NSColor.systemBlue.cgColor
         )
         tick()
     }
