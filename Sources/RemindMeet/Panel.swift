@@ -1,8 +1,20 @@
 import AppKit
 import SwiftUI
 
+enum Session {
+    /// The real reminder, due now: its buttons change what happens next.
+    case live
+    /// Opened from the menu: buttons only close it, except Join, which opens the link.
+    case preview
+}
+
+struct Reminder: Equatable {
+    let meeting: Meeting
+    let session: Session
+}
+
 final class PanelModel: ObservableObject {
-    @Published var meeting: Meeting?
+    @Published var reminder: Reminder?
     @Published var now = Date()
     @Published var snoozesLeft = 0
     @Published var meetOpened = false
@@ -19,8 +31,6 @@ final class PanelController {
     let model = PanelModel()
     private let panel: OverlayPanel
     private var hiding = false
-
-    var shownMeetingID: String? { panel.isVisible && !hiding ? model.meeting?.id : nil }
 
     init(onJoin: @escaping () -> Void, onSnooze: @escaping () -> Void, onSkip: @escaping () -> Void) {
         panel = OverlayPanel(
@@ -53,10 +63,16 @@ final class PanelController {
             content.bottomAnchor.constraint(equalTo: blur.bottomAnchor),
         ])
         panel.contentView = blur
+
+        NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [unowned self] event in
+            guard event.keyCode == 53, panel.isKeyWindow, model.reminder?.session == .preview else { return event }
+            hide()
+            return nil
+        }
     }
 
-    func show(_ meeting: Meeting, snoozesLeft: Int, meetOpened: Bool, now: Date) {
-        model.meeting = meeting
+    func show(_ reminder: Reminder, snoozesLeft: Int, meetOpened: Bool, now: Date) {
+        model.reminder = reminder
         model.snoozesLeft = snoozesLeft
         model.meetOpened = meetOpened
         model.now = now
@@ -120,18 +136,22 @@ private struct PanelView: View {
                 endRadius: 1100
             )
 
-            if let meeting = model.meeting {
-                content(meeting)
+            if let reminder = model.reminder {
+                content(reminder)
                     .scaleEffect(model.presented ? 1 : 0.96)
             }
         }
         .ignoresSafeArea()
     }
 
-    private func content(_ meeting: Meeting) -> some View {
+    private func content(_ reminder: Reminder) -> some View {
+        let meeting = reminder.meeting
         let late = model.now >= meeting.start
         return VStack(spacing: 0) {
-            CalendarLabel(meeting: meeting)
+            HStack(spacing: 8) {
+                CalendarLabel(meeting: meeting)
+                if reminder.session == .preview { PreviewTag() }
+            }
 
             Countdown(start: meeting.start, now: model.now)
                 .padding(.top, 40)
@@ -179,7 +199,7 @@ private struct PanelView: View {
                 .buttonStyle(PillButtonStyle(kind: .quiet))
                 .padding(.top, 12)
 
-            Text(footnote(meeting, late: late))
+            Text(footnote(reminder, late: late))
                 .font(.system(size: 13))
                 .foregroundStyle(.white.opacity(0.35))
                 .padding(.top, 36)
@@ -199,8 +219,11 @@ private struct PanelView: View {
         return code.count > 1 ? "\(time)  ·  meet.google.com/\(code)" : "\(time)  ·  Google Meet"
     }
 
-    private func footnote(_ meeting: Meeting, late: Bool) -> String {
-        guard meeting.url != nil else { return " " }
+    private func footnote(_ reminder: Reminder, late: Bool) -> String {
+        if reminder.session == .preview {
+            return late ? " " : "The real reminder appears a minute before start."
+        }
+        guard reminder.meeting.url != nil else { return " " }
         if model.meetOpened { return "Meet is open in your browser." }
         return late ? " " : "Meet opens on its own at start time."
     }
@@ -221,6 +244,18 @@ private struct CalendarLabel: View {
         .padding(.horizontal, 14)
         .frame(height: 30)
         .background(Capsule().fill(.white.opacity(0.08)))
+    }
+}
+
+/// Outlined rather than filled so it reads as a mode, not as more meeting data.
+private struct PreviewTag: View {
+    var body: some View {
+        Text("Preview")
+            .font(.system(size: 13, weight: .medium))
+            .foregroundStyle(.white.opacity(0.75))
+            .padding(.horizontal, 12)
+            .frame(height: 30)
+            .background(Capsule(style: .circular).strokeBorder(.white.opacity(0.22), lineWidth: 1))
     }
 }
 
@@ -247,7 +282,8 @@ private struct Countdown: View {
 
             VStack(spacing: 6) {
                 Text(clock(late ? -delta : delta, late: late))
-                    .font(.system(size: 64, weight: .light))
+                    // h:mm:ss at 64pt would touch the ring.
+                    .font(.system(size: abs(delta) >= 3600 ? 46 : 64, weight: .light))
                     .monospacedDigit()
                     .tracking(-1)
                     .foregroundStyle(tint)
@@ -263,7 +299,9 @@ private struct Countdown: View {
 
     private func clock(_ interval: TimeInterval, late: Bool) -> String {
         let total = Int(interval.rounded())
-        let text = String(format: "%d:%02d", total / 60, total % 60)
+        let text = total >= 3600
+            ? String(format: "%d:%02d:%02d", total / 3600, total / 60 % 60, total % 60)
+            : String(format: "%d:%02d", total / 60, total % 60)
         return late ? "+\(text)" : text
     }
 }

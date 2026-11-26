@@ -29,13 +29,10 @@ func meetURL(in event: EKEvent) -> URL? {
 }
 
 /// A meeting is a timed event that has a Meet link or other attendees, and that I haven't declined.
-func fetchMeetings(store: EKEventStore, around now: Date) -> [Meeting] {
-    let predicate = store.predicateForEvents(
-        withStart: now.addingTimeInterval(-6 * 3600),
-        end: now.addingTimeInterval(3600),
-        calendars: nil
-    )
-    return store.events(matching: predicate).compactMap { event in
+func fetchMeetings(store: EKEventStore, in interval: DateInterval) -> [Meeting] {
+    let predicate = store.predicateForEvents(withStart: interval.start, end: interval.end, calendars: nil)
+    let events = store.events(matching: predicate).sorted { $0.startDate < $1.startDate }
+    return events.compactMap { event in
         guard !event.isAllDay, event.status != .canceled else { return nil }
         let me = event.attendees?.first(where: \.isCurrentUser)
         if me?.participantStatus == .declined { return nil }

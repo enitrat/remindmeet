@@ -6,11 +6,13 @@ private let snoozeDuration: TimeInterval = 60
 private let maxSnoozes = 2
 
 private struct MeetingState {
+    enum Outcome { case joined, skipped }
+
     var snoozes = 0
     var snoozedUntil: Date?
     var meetOpened = false
-    /// Joined or skipped: the panel never comes back for this occurrence.
-    var done = false
+    /// Once set, the panel never comes back for this occurrence.
+    var outcome: Outcome?
 }
 
 final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
@@ -18,8 +20,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var statusItem: NSStatusItem!
     private var panel: PanelController!
     private var states: [String: MeetingState] = [:]
-    private var nextMeeting: Meeting?
-    private var testMeeting: Meeting?
     private var hasAccess = false
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -47,23 +47,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     private func tick() {
         let now = Date()
-        var meetings = hasAccess ? fetchMeetings(store: store, around: now) : []
-        if let testMeeting { meetings.append(testMeeting) }
+        let window = DateInterval(start: now.addingTimeInterval(-6 * 3600), end: now.addingTimeInterval(3600))
+        let meetings = hasAccess ? fetchMeetings(store: store, in: window) : []
 
         let liveIDs = Set(meetings.map(\.id))
         states = states.filter { liveIDs.contains($0.key) }
 
-        nextMeeting = meetings.filter { $0.start > now }.min { $0.start < $1.start }
-
         let active = meetings
-            .filter { now >= $0.start - leadTime && now < $0.end && !(states[$0.id]?.done ?? false) }
+            .filter { now >= $0.start - leadTime && now < $0.end && states[$0.id]?.outcome == nil }
             .min { $0.start < $1.start }
 
         guard let meeting = active else {
-            panel.hide()
+            showNothingLive(now: now)
             return
         }
-        if let shown = panel.shownMeetingID, shown != meeting.id { panel.hide() }
 
         var state = states[meeting.id, default: MeetingState()]
         if now >= meeting.start, !state.meetOpened, let url = meeting.url {
@@ -73,30 +70,49 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         states[meeting.id] = state
 
         if let until = state.snoozedUntil, now < until {
-            panel.hide()
+            showNothingLive(now: now)
         } else {
-            panel.show(meeting, snoozesLeft: maxSnoozes - state.snoozes, meetOpened: state.meetOpened, now: now)
+            panel.show(
+                Reminder(meeting: meeting, session: .live),
+                snoozesLeft: maxSnoozes - state.snoozes,
+                meetOpened: state.meetOpened,
+                now: now
+            )
         }
     }
 
-    private func updateShownState(_ change: (inout MeetingState) -> Void) {
-        guard let id = panel.model.meeting?.id else { return }
-        change(&states[id, default: MeetingState()])
+    /// A preview stays up and keeps counting; a live reminder that is no longer due goes away.
+    private func showNothingLive(now: Date) {
+        if panel.model.reminder?.session == .live {
+            panel.hide()
+        } else {
+            panel.model.now = now
+        }
+    }
+
+    /// A preview closes without touching reminder state.
+    private func respond(_ change: (inout MeetingState) -> Void) {
+        guard let reminder = panel.model.reminder else { return }
         panel.hide()
+        guard reminder.session == .live else { return }
+        change(&states[reminder.meeting.id, default: MeetingState()])
         tick()
     }
 
     private func join() {
-        guard let meeting = panel.model.meeting else { return }
-        updateShownState { state in
-            if !state.meetOpened, let url = meeting.url { NSWorkspace.shared.open(url) }
+        guard let reminder = panel.model.reminder else { return }
+        if reminder.session == .preview, let url = reminder.meeting.url {
+            NSWorkspace.shared.open(url)
+        }
+        respond { state in
+            if !state.meetOpened, let url = reminder.meeting.url { NSWorkspace.shared.open(url) }
             state.meetOpened = true
-            state.done = true
+            state.outcome = .joined
         }
     }
 
     private func snooze() {
-        updateShownState { state in
+        respond { state in
             guard state.snoozes < maxSnoozes else { return }
             state.snoozes += 1
             state.snoozedUntil = Date().addingTimeInterval(snoozeDuration)
@@ -104,44 +120,91 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     private func skip() {
-        updateShownState { $0.done = true }
+        respond { $0.outcome = .skipped }
     }
 
     // MARK: Menu
 
     func menuNeedsUpdate(_ menu: NSMenu) {
         menu.removeAllItems()
+        let now = Date()
+        let today = Calendar.current.dateInterval(of: .day, for: now)!
 
-        let header: String
+        menu.addItem(.sectionHeader(
+            title: "Today · \(now.formatted(.dateTime.weekday(.abbreviated).day().month(.abbreviated)))"
+        ))
+
         if !hasAccess {
-            header = "No calendar access"
-        } else if let next = nextMeeting {
-            header = "Next: \(next.title) at \(next.start.formatted(date: .omitted, time: .shortened))"
+            menu.addItem(withTitle: "No calendar access", action: nil, keyEquivalent: "")
         } else {
-            header = "No meetings in the next hour"
+            let meetings = fetchMeetings(store: store, in: today)
+            if meetings.isEmpty {
+                menu.addItem(withTitle: "No meetings today", action: nil, keyEquivalent: "")
+            }
+            for meeting in meetings {
+                menu.addItem(menuItem(for: meeting, now: now))
+            }
         }
-        menu.addItem(withTitle: header, action: nil, keyEquivalent: "")
-        menu.addItem(.separator())
-
-        menu.addItem(withTitle: "Test the panel", action: #selector(startTest), keyEquivalent: "").target = self
 
         menu.addItem(.separator())
         menu.addItem(withTitle: "Quit", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
     }
 
-    /// A fake meeting starting in 20 s: exercises T-1, snooze and the T0 auto-open on a real Meet URL.
-    @objc private func startTest() {
-        let start = Date().addingTimeInterval(20)
-        testMeeting = Meeting(
-            id: "test@\(start.timeIntervalSince1970)",
-            title: "Test meeting",
-            start: start,
-            end: start.addingTimeInterval(5 * 60),
-            url: URL(string: "https://meet.google.com/"),
-            calendarName: "Test",
-            calendarColor: NSColor.systemBlue.cgColor
+    private func menuItem(for meeting: Meeting, now: Date) -> NSMenuItem {
+        let item = NSMenuItem(title: "", action: #selector(preview(_:)), keyEquivalent: "")
+        item.target = self
+        item.representedObject = meeting
+
+        let past = now >= meeting.end
+        var title = "\(meeting.start.formatted(date: .omitted, time: .shortened))  \(meeting.title)"
+        if #available(macOS 14.4, *) {
+            item.subtitle = status(of: meeting, now: now)
+        } else {
+            title += "  ·  \(status(of: meeting, now: now))"
+        }
+        item.attributedTitle = NSAttributedString(string: title, attributes: [
+            .font: NSFont.menuFont(ofSize: 0),
+            .foregroundColor: past ? NSColor.secondaryLabelColor : NSColor.labelColor,
+        ])
+        item.image = calendarDot(meeting.calendarColor, dimmed: past)
+        return item
+    }
+
+    private func status(of meeting: Meeting, now: Date) -> String {
+        let status: String
+        switch states[meeting.id]?.outcome {
+        case .joined: status = "Joined"
+        case .skipped: status = "Skipped"
+        case nil:
+            if now >= meeting.end {
+                status = "Ended"
+            } else if now >= meeting.start {
+                status = "Now"
+            } else {
+                let minutes = Int((meeting.start.timeIntervalSince(now) / 60).rounded(.up))
+                status = minutes < 60 ? "in \(minutes) min" : "in \(minutes / 60) h \(minutes % 60) min"
+            }
+        }
+        return meeting.url == nil ? "\(status) · No video link" : status
+    }
+
+    private func calendarDot(_ color: CGColor?, dimmed: Bool) -> NSImage {
+        let fill = color.flatMap(NSColor.init(cgColor:)) ?? .tertiaryLabelColor
+        return NSImage(size: NSSize(width: 10, height: 10), flipped: false) { rect in
+            fill.withAlphaComponent(dimmed ? 0.45 : 1).setFill()
+            NSBezierPath(ovalIn: rect.insetBy(dx: 1, dy: 1)).fill()
+            return true
+        }
+    }
+
+    @objc private func preview(_ sender: NSMenuItem) {
+        guard let meeting = sender.representedObject as? Meeting else { return }
+        panel.show(
+            Reminder(meeting: meeting, session: .preview),
+            snoozesLeft: maxSnoozes - (states[meeting.id]?.snoozes ?? 0),
+            meetOpened: false,
+            now: Date()
         )
-        tick()
     }
 }
 
