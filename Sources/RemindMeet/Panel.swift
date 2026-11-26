@@ -139,6 +139,12 @@ private struct PanelView: View {
             if let reminder = model.reminder {
                 content(reminder)
                     .scaleEffect(model.presented ? 1 : 0.96)
+
+                // Far from Join and Snooze, so a hurried click can't dismiss the meeting for good.
+                Button("I won't join", action: onSkip)
+                    .buttonStyle(PillButtonStyle(kind: .quiet))
+                    .frame(maxHeight: .infinity, alignment: .bottom)
+                    .padding(.bottom, 64)
             }
         }
         .ignoresSafeArea()
@@ -195,14 +201,10 @@ private struct PanelView: View {
             }
             .padding(.top, 52)
 
-            Button("Skip this meeting", action: onSkip)
-                .buttonStyle(PillButtonStyle(kind: .quiet))
-                .padding(.top, 12)
-
             Text(footnote(reminder, late: late))
                 .font(.system(size: 13))
                 .foregroundStyle(.white.opacity(0.35))
-                .padding(.top, 36)
+                .padding(.top, 28)
         }
         .padding(48)
     }
@@ -224,7 +226,7 @@ private struct PanelView: View {
             return late ? " " : "The real reminder appears a minute before start."
         }
         guard reminder.meeting.url != nil else { return " " }
-        if model.meetOpened { return "Meet is open in your browser." }
+        if model.meetOpened { return "Meet is open in your browser, behind this screen." }
         return late ? " " : "Meet opens on its own at start time."
     }
 }
@@ -367,4 +369,3 @@ private struct PillButton: View {
         }
     }
 }
-
